@@ -77,7 +77,7 @@ router.post(
 
     await new Promise<void>((resolve, reject) => {
       const checkInterval = 100;
-      const maxWait = policy?.executionTimeout ?? 90_000;
+      const maxWait = policy?.executionTimeout ?? config.defaultExecutionTimeoutMs;
       let elapsed = 0;
 
       const intervalId = setInterval(() => {
@@ -90,7 +90,7 @@ router.post(
           return;
         }
 
-        if (current.status === 'COMPLETED' || current.status === 'FAILED') {
+        if (current.status === 'COMPLETED' || current.status === 'FAILED' || current.status === 'TIMED_OUT') {
           clearInterval(intervalId);
           resolve();
           return;
@@ -108,13 +108,17 @@ router.post(
       throw new AppError(404, 'Job not found', 'JOB_NOT_FOUND');
     }
 
-    const body: StatusResponse = {
-      delayTime: completed.delayTime,
-      executionTime: completed.executionTime,
-      id: completed.id,
-      output: completed.output,
-      status: completed.status,
-    };
+    const body: StatusResponse = completed.status === 'COMPLETED'
+      ? {
+          delayTime: completed.delayTime,
+          executionTime: completed.executionTime,
+          id: completed.id,
+          output: completed.output!,
+          status: 'COMPLETED',
+        }
+      : completed.status === 'FAILED'
+        ? { id: completed.id, error: completed.output?.error ?? 'Unknown error', status: 'FAILED' }
+        : { id: completed.id, status: 'TIMED_OUT' };
 
     res.status(200).json(body);
   }),
@@ -131,13 +135,34 @@ router.get(
       throw new AppError(404, 'Job not found or has expired', 'JOB_NOT_FOUND');
     }
 
-    const body: StatusResponse = {
-      delayTime: job.delayTime,
-      executionTime: job.executionTime,
-      id: job.id,
-      output: job.output,
-      status: job.status,
-    };
+    let body: StatusResponse;
+
+    switch (job.status) {
+      case 'IN_QUEUE':
+        body = { id: job.id, status: 'IN_QUEUE' };
+        break;
+      case 'IN_PROGRESS':
+        body = { delayTime: job.delayTime, id: job.id, input: job.input, status: 'IN_PROGRESS' };
+        break;
+      case 'COMPLETED':
+        body = {
+          delayTime: job.delayTime,
+          executionTime: job.executionTime,
+          id: job.id,
+          output: job.output!,
+          status: 'COMPLETED',
+        };
+        break;
+      case 'FAILED':
+        body = { id: job.id, error: job.output?.error ?? 'Unknown error', status: 'FAILED' };
+        break;
+      case 'CANCELLED':
+        body = { id: job.id, status: 'CANCELLED' };
+        break;
+      case 'TIMED_OUT':
+        body = { id: job.id, status: 'TIMED_OUT' };
+        break;
+    }
 
     res.status(200).json(body);
   }),

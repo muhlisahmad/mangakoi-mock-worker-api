@@ -88,6 +88,31 @@ All endpoints are under `/v2/{endpointId}` and require `Authorization: Bearer <M
 }
 ```
 
+### GET /status (in_queue)
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "status": "IN_QUEUE"
+}
+```
+
+### GET /status (in_progress)
+
+```json
+{
+  "delayTime": 1200,
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "input": {
+    "inputObjectKey": "uploads/page_001.png",
+    "sourceLanguage": "ja",
+    "targetLanguage": "en",
+    "readingDirection": "rtl"
+  },
+  "status": "IN_PROGRESS"
+}
+```
+
 ### GET /status (completed)
 
 ```json
@@ -108,14 +133,18 @@ All endpoints are under `/v2/{endpointId}` and require `Authorization: Bearer <M
 
 ```json
 {
-  "delayTime": 1200,
-  "executionTime": 5000,
   "id": "a1b2c3d4-...",
-  "output": {
-    "status": "failed",
-    "error": "SimulatedError: Mock pipeline failure"
-  },
+  "error": "SimulatedError: Mock pipeline failure",
   "status": "FAILED"
+}
+```
+
+### GET /status (timed_out)
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "status": "TIMED_OUT"
 }
 ```
 
@@ -146,10 +175,11 @@ IN_QUEUE → IN_PROGRESS → COMPLETED  (happy path, ~MOCK_FAILURE_RATE chance o
 IN_QUEUE → IN_PROGRESS → FAILED     (simulated failure)
 IN_QUEUE → CANCELLED                (cancel while queued)
 IN_PROGRESS → CANCELLED             (cancel while running)
-IN_QUEUE/IN_PROGRESS → TIMED_OUT    (TTL expiry, auto-deleted)
+IN_QUEUE → TIMED_OUT                (TTL expiry while queued)
+IN_PROGRESS → TIMED_OUT             (TTL expiry or executionTimeout exceeded)
 ```
 
-Jobs automatically expire after their `ttl` (default 30 minutes) and are removed from memory.
+Jobs automatically expire after their `ttl` (default 24 hours) and are removed from memory. Jobs that exceed `executionTimeout` while in `IN_PROGRESS` are also marked as `TIMED_OUT`.
 
 ---
 
@@ -163,7 +193,9 @@ Jobs automatically expire after their `ttl` (default 30 minutes) and are removed
 | `SIMULATED_DELAY_MIN_MS` | `1000` | Min simulated pipeline delay (ms) |
 | `SIMULATED_DELAY_MAX_MS` | `5000` | Max simulated pipeline delay (ms) |
 | `MOCK_FAILURE_RATE` | `0` | Probability of job failure (0.0–1.0) |
-| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout for webhook POST delivery (ms) |
+| `DEFAULT_EXECUTION_TIMEOUT_MS` | `600000` | Max execution time (ms) enforced during IN_PROGRESS |
+| `DEFAULT_TTL_MS` | `86400000` | Total job lifespan (ms) from creation — covers queue + execution |
+| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout per attempt for webhook POST delivery (ms); retries up to 2 more times with 10s delay on non-200 |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
 | `RATE_LIMIT_RUN` | `1000` | Max `/run` requests per 10s |
 | `RATE_LIMIT_RUNSYNC` | `2000` | Max `/runsync` requests per 10s |

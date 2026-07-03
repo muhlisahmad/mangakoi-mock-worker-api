@@ -111,14 +111,27 @@ All endpoints live under `/v2/{endpointId}` and require `Authorization: Bearer <
 }
 ```
 
-#### GET /status (still processing)
+#### GET /status (in_queue)
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "status": "IN_QUEUE"
+}
+```
+
+#### GET /status (in_progress)
 
 ```json
 {
   "delayTime": 1200,
-  "executionTime": 0,
   "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
-  "output": null,
+  "input": {
+    "inputObjectKey": "uploads/page_001.png",
+    "sourceLanguage": "ja",
+    "targetLanguage": "en",
+    "readingDirection": "rtl"
+  },
   "status": "IN_PROGRESS"
 }
 ```
@@ -143,14 +156,18 @@ All endpoints live under `/v2/{endpointId}` and require `Authorization: Bearer <
 
 ```json
 {
-  "delayTime": 1200,
-  "executionTime": 5000,
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "output": {
-    "status": "failed",
-    "error": "SimulatedError: Mock pipeline failure (controlled by MOCK_FAILURE_RATE)"
-  },
+  "error": "SimulatedError: Mock pipeline failure (controlled by MOCK_FAILURE_RATE)",
   "status": "FAILED"
+}
+```
+
+#### GET /status (timed_out)
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "status": "TIMED_OUT"
 }
 ```
 
@@ -258,7 +275,7 @@ curl -s --max-time 10 ...
 
 ### Webhook Delivery
 
-When a job includes a `webhook` URL, the mock POSTs the job result to that URL once the job reaches `COMPLETED` or `FAILED`. Delivery is fire-and-forget (non-blocking) with a configurable timeout (`WEBHOOK_TIMEOUT_MS`, default 10s).
+When a job includes a `webhook` URL, the mock POSTs the job result to that URL once the job reaches `COMPLETED` or `FAILED`. Delivery is fire-and-forget (non-blocking) with a configurable timeout (`WEBHOOK_TIMEOUT_MS`, default 10s). Retry behavior matches RunPod: up to 3 total attempts with a 10-second delay between retries, stopping only on HTTP 200.
 
 ```bash
 curl -s -X POST "http://localhost:3000/v2/$ENDPOINT/run" \
@@ -329,25 +346,30 @@ curl -s -X POST http://localhost:3000/v2/test/cancel/$COMPLETED_JOB \
              ┌──────────────┐    ┌──────────────┐
              │ IN_PROGRESS  │    │  CANCELLED   │
              └──────┬───────┘    └──────────────┘
-                    │
-          ┌─────────┴─────────┐
-          │                   │
-     pipeline success    pipeline failure
-          │                   │
-          ▼                   ▼
-   ┌──────────────┐   ┌──────────────┐
-   │  COMPLETED   │   │   FAILED     │
-   └──────────────┘   └──────┬───────┘
-                             │
-                        retry request
-                             │
-                             ▼
-                        ┌──────────────┐
-                        │  IN_QUEUE    │  (same job ID)
-                        └──────────────┘
+                    │                     │
+          ┌─────────┴─────────┐          │
+          │                   │          │
+     pipeline success    pipeline failure │
+          │                   │          │
+          ▼                   ▼          │
+   ┌──────────────┐   ┌──────────────┐   │
+   │  COMPLETED   │   │   FAILED     │   │
+   └──────────────┘   └──────┬───────┘   │
+                             │           │
+                        retry request    │
+                             │           │
+                             ▼           │
+                         ┌──────────────┐│
+                         │  IN_QUEUE    ││  (same job ID)
+                         └──────────────┘│
+                                          │
+                                          ▼
+                                   ┌──────────────┐
+                                   │  TIMED_OUT   │
+                                   └──────────────┘
 ```
 
-Any job in `IN_QUEUE` or `IN_PROGRESS` that exceeds its `ttl` moves to `TIMED_OUT` and is removed from memory.
+Any job in `IN_QUEUE` or `IN_PROGRESS` that exceeds its `ttl` moves to `TIMED_OUT` and is removed from memory. Jobs in `IN_PROGRESS` also time out if execution exceeds `executionTimeout`.
 
 ---
 
@@ -363,8 +385,10 @@ All configuration is through environment variables. Copy `.env.example` to `.env
 | `SIMULATED_DELAY_MIN_MS` | `1000` | Minimum simulated pipeline duration in milliseconds. |
 | `SIMULATED_DELAY_MAX_MS` | `5000` | Maximum simulated pipeline duration in milliseconds. The actual delay is uniformly random between min and max. |
 | `MOCK_FAILURE_RATE` | `0` | Probability (0.0 to 1.0) that a job will simulate a pipeline failure. `0` means all jobs succeed; `0.1` means ~10% fail. |
+| `DEFAULT_EXECUTION_TIMEOUT_MS` | `600000` | Maximum time (ms) a job can actively run once a worker picks it up. Enforced during `IN_PROGRESS` — if the simulated delay exceeds this, the job is marked `TIMED_OUT`. |
+| `DEFAULT_TTL_MS` | `86400000` | Total lifespan (ms) of a job from creation. Covers queue time + execution + idle. After expiry, the job is deleted regardless of state. |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin. Set to a specific origin in production. |
-| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout in ms for POST delivery to the `webhook` URL when a job completes or fails. |
+| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout per attempt (ms) for POST delivery to the `webhook` URL. On non-200, retries up to 2 more times with a 10s delay. |
 | `RATE_LIMIT_RUN` | `1000` | Max `/run` requests per 10-second window. Matches RunPod's documented rate limit. |
 | `RATE_LIMIT_RUNSYNC` | `2000` | Max `/runsync` requests per 10-second window. |
 | `RATE_LIMIT_STATUS` | `2000` | Max `/status` requests per 10-second window. |
@@ -466,7 +490,7 @@ This mock is designed for **local development and integration testing**. It is n
 | Aspect | Real RunPod | This Mock |
 |--------|-------------|-----------|
 | **Storage** | S3-compatible object storage with `s3Config` | No storage — returns a synthetic `outputObjectKey` path. |
-| **Webhooks** | Sends HTTP POST to `webhook` URL on completion | Delivered asynchronously via POST with configurable timeout. |
+| **Webhooks** | Sends HTTP POST to `webhook` URL on completion | Delivered asynchronously via POST with configurable timeout. Retries up to 3 times with 10s delay, matching RunPod's documented behavior. |
 | **Results retention** | 30 min (async), 1 min (sync) | Configurable via `policy.ttl`, defaults to 30 min. |
 | **Worker scaling** | Auto-scales workers based on queue depth | Single simulated worker. |
 | **Streaming** | `/stream` endpoint for incremental output | Not implemented. |

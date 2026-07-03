@@ -35,6 +35,8 @@ const config: AppConfig = {
   simulatedDelayMaxMs: envInt('SIMULATED_DELAY_MAX_MS', 5000),
   mockFailureRate: envFloat('MOCK_FAILURE_RATE', 0),
   webhookTimeoutMs: envInt('WEBHOOK_TIMEOUT_MS', 10000),
+  defaultExecutionTimeoutMs: envInt('DEFAULT_EXECUTION_TIMEOUT_MS', 600000),
+  defaultTtlMs: envInt('DEFAULT_TTL_MS', 86400000),
   corsOrigin: envString('CORS_ORIGIN', '*'),
   rateLimits: {
     run: envInt('RATE_LIMIT_RUN', 1000),

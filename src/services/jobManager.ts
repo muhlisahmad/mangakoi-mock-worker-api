@@ -7,7 +7,6 @@ import config from '../config/index.js';
 class JobManager {
   private jobs: Map<string, Job> = new Map();
   private timers: Map<string, NodeJS.Timeout> = new Map();
-  private readonly DEFAULT_TTL_MS = 30 * 60 * 1000;
 
   createJob(
     endpointId: string,
@@ -38,7 +37,7 @@ class JobManager {
     this.jobs.set(id, job);
     log.info('Job created', { jobId: id, endpointId, status: job.status });
 
-    const ttl = policy?.ttl ?? this.DEFAULT_TTL_MS;
+    const ttl = policy?.ttl ?? config.defaultTtlMs;
     this.scheduleExpiry(id, ttl);
 
     return job;
@@ -53,7 +52,8 @@ class JobManager {
     job.delayTime = job.startedAt - job.createdAt;
     log.info('Job processing started', { jobId, delayTime: job.delayTime });
 
-    const delay = this.randomDelay();
+    const simulatedDelay = this.randomDelay();
+    const executionTimeout = job.policy?.executionTimeout ?? config.defaultExecutionTimeoutMs;
     const shouldFail = Math.random() < config.mockFailureRate;
 
     this.timers.set(
@@ -64,7 +64,17 @@ class JobManager {
         } else {
           this.completeJob(jobId);
         }
-      }, delay),
+      }, simulatedDelay),
+    );
+
+    const execTimerId = `exec-${jobId}`;
+    this.timers.set(
+      execTimerId,
+      setTimeout(() => {
+        if (job.status === 'IN_PROGRESS') {
+          this.timeoutJob(jobId, `Execution timed out after ${executionTimeout}ms`);
+        }
+      }, executionTimeout),
     );
   }
 
@@ -82,6 +92,23 @@ class JobManager {
     };
 
     log.info('Job completed', { jobId, executionTime: job.executionTime });
+    deliverWebhook(job);
+    this.cleanupTimer(jobId);
+  }
+
+  private timeoutJob(jobId: string, reason: string): void {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    job.status = 'TIMED_OUT';
+    job.completedAt = Date.now();
+    job.executionTime = job.completedAt - (job.startedAt ?? job.createdAt);
+    job.output = {
+      status: 'failed',
+      error: reason,
+    };
+
+    log.warn('Job timed out', { jobId, executionTime: job.executionTime, reason });
     deliverWebhook(job);
     this.cleanupTimer(jobId);
   }
@@ -139,7 +166,7 @@ class JobManager {
     job.completedAt = null;
     job.retryCount += 1;
 
-    const ttl = job.policy?.ttl ?? this.DEFAULT_TTL_MS;
+    const ttl = job.policy?.ttl ?? config.defaultTtlMs;
     this.scheduleExpiry(jobId, ttl);
 
     log.info('Job retried', { jobId, retryCount: job.retryCount });

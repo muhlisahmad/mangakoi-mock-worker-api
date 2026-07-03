@@ -51,13 +51,13 @@ export interface RunResponse {
   status: Extract<JobStatus, 'IN_QUEUE'>;
 }
 
-export interface StatusResponse {
-  delayTime: number;
-  executionTime: number;
-  id: string;
-  output: JobOutput | null;
-  status: JobStatus;
-}
+export type StatusResponse =
+  | { id: string; status: 'IN_QUEUE' }
+  | { delayTime: number; id: string; input: WorkerInput; status: 'IN_PROGRESS' }
+  | { delayTime: number; executionTime: number; id: string; output: JobOutput; status: 'COMPLETED' }
+  | { id: string; error: string; status: 'FAILED' }
+  | { id: string; status: 'CANCELLED' }
+  | { id: string; status: 'TIMED_OUT' };
 
 export interface CancelResponse {
   id: string;
@@ -96,6 +96,8 @@ export interface AppConfig {
   simulatedDelayMaxMs: number;
   mockFailureRate: number;
   webhookTimeoutMs: number;
+  defaultExecutionTimeoutMs: number;
+  defaultTtlMs: number;
   corsOrigin: string;
   rateLimits: {
     run: number;
