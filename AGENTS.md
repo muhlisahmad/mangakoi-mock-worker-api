@@ -163,6 +163,7 @@ Jobs automatically expire after their `ttl` (default 30 minutes) and are removed
 | `SIMULATED_DELAY_MIN_MS` | `1000` | Min simulated pipeline delay (ms) |
 | `SIMULATED_DELAY_MAX_MS` | `5000` | Max simulated pipeline delay (ms) |
 | `MOCK_FAILURE_RATE` | `0` | Probability of job failure (0.0–1.0) |
+| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout for webhook POST delivery (ms) |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
 | `RATE_LIMIT_RUN` | `1000` | Max `/run` requests per 10s |
 | `RATE_LIMIT_RUNSYNC` | `2000` | Max `/runsync` requests per 10s |

@@ -1,6 +1,7 @@
 import type { Job, WorkerInput } from '../types/index.js';
 import { generateJobId } from '../utils/idGenerator.js';
 import { log } from '../utils/logger.js';
+import { deliverWebhook } from './webhook.js';
 import config from '../config/index.js';
 
 class JobManager {
@@ -81,6 +82,7 @@ class JobManager {
     };
 
     log.info('Job completed', { jobId, executionTime: job.executionTime });
+    deliverWebhook(job);
     this.cleanupTimer(jobId);
   }
 
@@ -97,6 +99,7 @@ class JobManager {
     };
 
     log.warn('Job failed (simulated)', { jobId, executionTime: job.executionTime });
+    deliverWebhook(job);
     this.cleanupTimer(jobId);
   }
 

@@ -95,6 +95,7 @@ export interface AppConfig {
   simulatedDelayMinMs: number;
   simulatedDelayMaxMs: number;
   mockFailureRate: number;
+  webhookTimeoutMs: number;
   corsOrigin: string;
   rateLimits: {
     run: number;

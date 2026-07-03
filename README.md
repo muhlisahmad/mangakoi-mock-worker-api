@@ -256,6 +256,32 @@ Use the `--max-time` flag to control how long your client waits:
 curl -s --max-time 10 ...
 ```
 
+### Webhook Delivery
+
+When a job includes a `webhook` URL, the mock POSTs the job result to that URL once the job reaches `COMPLETED` or `FAILED`. Delivery is fire-and-forget (non-blocking) with a configurable timeout (`WEBHOOK_TIMEOUT_MS`, default 10s).
+
+```bash
+curl -s -X POST "http://localhost:3000/v2/$ENDPOINT/run" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {"inputObjectKey": "page.png"},
+    "webhook": "https://your-server.com/callback"
+  }'
+```
+
+The webhook payload matches the `/status` response shape:
+
+```json
+{
+  "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
+  "status": "COMPLETED",
+  "output": { "status": "done", "outputObjectKey": "outputs/.../translated.png", "elapsedSeconds": 0.8 },
+  "delayTime": 120,
+  "executionTime": 800
+}
+```
+
 ### Error Handling
 
 ```bash
@@ -338,6 +364,7 @@ All configuration is through environment variables. Copy `.env.example` to `.env
 | `SIMULATED_DELAY_MAX_MS` | `5000` | Maximum simulated pipeline duration in milliseconds. The actual delay is uniformly random between min and max. |
 | `MOCK_FAILURE_RATE` | `0` | Probability (0.0 to 1.0) that a job will simulate a pipeline failure. `0` means all jobs succeed; `0.1` means ~10% fail. |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin. Set to a specific origin in production. |
+| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout in ms for POST delivery to the `webhook` URL when a job completes or fails. |
 | `RATE_LIMIT_RUN` | `1000` | Max `/run` requests per 10-second window. Matches RunPod's documented rate limit. |
 | `RATE_LIMIT_RUNSYNC` | `2000` | Max `/runsync` requests per 10-second window. |
 | `RATE_LIMIT_STATUS` | `2000` | Max `/status` requests per 10-second window. |
@@ -439,7 +466,7 @@ This mock is designed for **local development and integration testing**. It is n
 | Aspect | Real RunPod | This Mock |
 |--------|-------------|-----------|
 | **Storage** | S3-compatible object storage with `s3Config` | No storage — returns a synthetic `outputObjectKey` path. |
-| **Webhooks** | Sends HTTP POST to `webhook` URL on completion | Accepted, stored, but **not delivered**. |
+| **Webhooks** | Sends HTTP POST to `webhook` URL on completion | Delivered asynchronously via POST with configurable timeout. |
 | **Results retention** | 30 min (async), 1 min (sync) | Configurable via `policy.ttl`, defaults to 30 min. |
 | **Worker scaling** | Auto-scales workers based on queue depth | Single simulated worker. |
 | **Streaming** | `/stream` endpoint for incremental output | Not implemented. |
