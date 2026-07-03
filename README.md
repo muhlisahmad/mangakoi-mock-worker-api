@@ -95,14 +95,16 @@ All endpoints live under `/v2/{endpointId}` and require `Authorization: Bearer <
 
 #### POST /runsync (sync completion)
 
+> Sync job IDs are prefixed with `sync-` to match the real RunPod API.
+
 ```json
 {
   "delayTime": 824,
   "executionTime": 3391,
-  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e3b",
+  "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
   "output": {
     "status": "done",
-    "outputObjectKey": "outputs/60902e6c-08a1-426e-9cb9-9eaec90f5e3b/translated.png",
+    "outputObjectKey": "outputs/sync-79164ff4-d212-44bc-9fe3-389e199a5c15/translated.png",
     "elapsedSeconds": 45.2
   },
   "status": "COMPLETED"

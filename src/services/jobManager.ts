@@ -13,8 +13,9 @@ class JobManager {
     input: WorkerInput,
     webhook?: string,
     policy?: { executionTimeout?: number; lowPriority?: boolean; ttl?: number },
+    idPrefix?: string,
   ): Job {
-    const id = generateJobId();
+    const id = generateJobId(idPrefix);
     const now = Date.now();
 
     const job: Job = {

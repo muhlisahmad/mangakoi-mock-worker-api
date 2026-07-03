@@ -71,7 +71,7 @@ router.post(
       policy?: { executionTimeout?: number; lowPriority?: boolean; ttl?: number };
     };
 
-    const job = jobManager.createJob(endpointId, input, webhook ?? undefined, policy);
+    const job = jobManager.createJob(endpointId, input, webhook ?? undefined, policy, 'sync-');
     jobManager.startProcessing(job.id);
     log.info('/runsync submitted', { jobId: job.id, endpointId });
 

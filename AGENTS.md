@@ -72,6 +72,22 @@ All endpoints are under `/v2/{endpointId}` and require `Authorization: Bearer <M
 }
 ```
 
+### POST /runsync (sync)
+
+```json
+{
+  "delayTime": 824,
+  "executionTime": 3391,
+  "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
+  "output": {
+    "status": "done",
+    "outputObjectKey": "outputs/sync-79164ff4-d212-44bc-9fe3-389e199a5c15/translated.png",
+    "elapsedSeconds": 45.2
+  },
+  "status": "COMPLETED"
+}
+```
+
 ### GET /status (completed)
 
 ```json
