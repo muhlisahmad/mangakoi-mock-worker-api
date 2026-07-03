@@ -71,16 +71,16 @@ All endpoints live under `/v2/{endpointId}` and require `Authorization: Bearer <
 
 ### Operations Reference
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/v2/:endpointId/run` | Submit an asynchronous job. Returns immediately with a job ID. Results available via `/status` for 30 minutes. |
-| `POST` | `/v2/:endpointId/runsync` | Submit a synchronous job. Blocks the HTTP response until the job completes (or times out). |
-| `GET` | `/v2/:endpointId/status/:jobId` | Retrieve the current state and output of a submitted job. |
-| `POST` | `/v2/:endpointId/cancel/:jobId` | Cancel a job that is queued or in progress. Returns 409 if the job has already terminated. |
-| `POST` | `/v2/:endpointId/retry/:jobId` | Requeue a `FAILED` or `TIMED_OUT` job with the same ID and input. |
-| `POST` | `/v2/:endpointId/purge-queue` | Remove all queued (`IN_QUEUE`) jobs. Returns the count removed. |
-| `GET` | `/v2/:endpointId/health` | Return operational statistics — job counts by state, worker status. |
-| `GET` | `/health` | Simple liveness check. No authentication required. |
+| Method | Path                            | Description                                                                                                    |
+| ------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/v2/:endpointId/run`           | Submit an asynchronous job. Returns immediately with a job ID. Results available via `/status` for 30 minutes. |
+| `POST` | `/v2/:endpointId/runsync`       | Submit a synchronous job. Blocks the HTTP response until the job completes (or times out).                     |
+| `GET`  | `/v2/:endpointId/status/:jobId` | Retrieve the current state and output of a submitted job.                                                      |
+| `POST` | `/v2/:endpointId/cancel/:jobId` | Cancel a job that is queued or in progress. Returns 409 if the job has already terminated.                     |
+| `POST` | `/v2/:endpointId/retry/:jobId`  | Requeue a `FAILED` or `TIMED_OUT` job with the same ID and input.                                              |
+| `POST` | `/v2/:endpointId/purge-queue`   | Remove all queued (`IN_QUEUE`) jobs. Returns the count removed.                                                |
+| `GET`  | `/v2/:endpointId/health`        | Return operational statistics — job counts by state, worker status.                                            |
+| `GET`  | `/health`                       | Simple liveness check. No authentication required.                                                             |
 
 ### Response Formats
 
@@ -293,7 +293,11 @@ The webhook payload matches the `/status` response shape:
 {
   "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
   "status": "COMPLETED",
-  "output": { "status": "done", "outputObjectKey": "outputs/.../translated.png", "elapsedSeconds": 0.8 },
+  "output": {
+    "status": "done",
+    "outputObjectKey": "outputs/.../translated.png",
+    "elapsedSeconds": 0.8
+  },
   "delayTime": 120,
   "executionTime": 800
 }
@@ -347,21 +351,21 @@ curl -s -X POST http://localhost:3000/v2/test/cancel/$COMPLETED_JOB \
              │ IN_PROGRESS  │    │  CANCELLED   │
              └──────┬───────┘    └──────────────┘
                     │                     │
-          ┌─────────┴─────────┐          │
-          │                   │          │
+          ┌─────────┴─────────┐           │
+          │                   │           │
      pipeline success    pipeline failure │
-          │                   │          │
-          ▼                   ▼          │
-   ┌──────────────┐   ┌──────────────┐   │
-   │  COMPLETED   │   │   FAILED     │   │
-   └──────────────┘   └──────┬───────┘   │
-                             │           │
-                        retry request    │
-                             │           │
-                             ▼           │
-                         ┌──────────────┐│
-                         │  IN_QUEUE    ││  (same job ID)
-                         └──────────────┘│
+          │                   │           │
+          ▼                   ▼           │
+   ┌──────────────┐   ┌──────────────┐    │
+   │  COMPLETED   │   │   FAILED     │    │
+   └──────────────┘   └──────┬───────┘    │
+                             │            │
+                        retry request     │
+                             │            │
+                             ▼            │
+                         ┌──────────────┐ │
+                         │  IN_QUEUE    │ │  (same job ID)
+                         └──────────────┘ │
                                           │
                                           ▼
                                    ┌──────────────┐
@@ -377,33 +381,33 @@ Any job in `IN_QUEUE` or `IN_PROGRESS` that exceeds its `ttl` moves to `TIMED_OU
 
 All configuration is through environment variables. Copy `.env.example` to `.env` and modify.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | HTTP port the server listens on. |
-| `NODE_ENV` | `development` | Set to `production` to suppress stack traces in error responses. |
-| `MOCK_API_KEY` | `dev-mock-api-key-change-in-production` | Bearer token clients must send in the `Authorization` header. **Change this for anything beyond local testing.** |
-| `SIMULATED_DELAY_MIN_MS` | `1000` | Minimum simulated pipeline duration in milliseconds. |
-| `SIMULATED_DELAY_MAX_MS` | `5000` | Maximum simulated pipeline duration in milliseconds. The actual delay is uniformly random between min and max. |
-| `MOCK_FAILURE_RATE` | `0` | Probability (0.0 to 1.0) that a job will simulate a pipeline failure. `0` means all jobs succeed; `0.1` means ~10% fail. |
-| `DEFAULT_EXECUTION_TIMEOUT_MS` | `600000` | Maximum time (ms) a job can actively run once a worker picks it up. Enforced during `IN_PROGRESS` — if the simulated delay exceeds this, the job is marked `TIMED_OUT`. |
-| `DEFAULT_TTL_MS` | `86400000` | Total lifespan (ms) of a job from creation. Covers queue time + execution + idle. After expiry, the job is deleted regardless of state. |
-| `CORS_ORIGIN` | `*` | Allowed CORS origin. Set to a specific origin in production. |
-| `WEBHOOK_TIMEOUT_MS` | `10000` | Timeout per attempt (ms) for POST delivery to the `webhook` URL. On non-200, retries up to 2 more times with a 10s delay. |
-| `RATE_LIMIT_RUN` | `1000` | Max `/run` requests per 10-second window. Matches RunPod's documented rate limit. |
-| `RATE_LIMIT_RUNSYNC` | `2000` | Max `/runsync` requests per 10-second window. |
-| `RATE_LIMIT_STATUS` | `2000` | Max `/status` requests per 10-second window. |
-| `RATE_LIMIT_CANCEL` | `100` | Max `/cancel` requests per 10-second window. |
-| `RATE_LIMIT_PURGE_QUEUE` | `2` | Max `/purge-queue` requests per 10-second window. |
-| `RATE_LIMIT_HEALTH` | `2000` | Max `/health` requests per 10-second window. |
+| Variable                       | Default                                 | Description                                                                                                                                                             |
+| ------------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                         | `3000`                                  | HTTP port the server listens on.                                                                                                                                        |
+| `NODE_ENV`                     | `development`                           | Set to `production` to suppress stack traces in error responses.                                                                                                        |
+| `MOCK_API_KEY`                 | `dev-mock-api-key-change-in-production` | Bearer token clients must send in the `Authorization` header. **Change this for anything beyond local testing.**                                                        |
+| `SIMULATED_DELAY_MIN_MS`       | `1000`                                  | Minimum simulated pipeline duration in milliseconds.                                                                                                                    |
+| `SIMULATED_DELAY_MAX_MS`       | `5000`                                  | Maximum simulated pipeline duration in milliseconds. The actual delay is uniformly random between min and max.                                                          |
+| `MOCK_FAILURE_RATE`            | `0`                                     | Probability (0.0 to 1.0) that a job will simulate a pipeline failure. `0` means all jobs succeed; `0.1` means ~10% fail.                                                |
+| `DEFAULT_EXECUTION_TIMEOUT_MS` | `600000`                                | Maximum time (ms) a job can actively run once a worker picks it up. Enforced during `IN_PROGRESS` — if the simulated delay exceeds this, the job is marked `TIMED_OUT`. |
+| `DEFAULT_TTL_MS`               | `86400000`                              | Total lifespan (ms) of a job from creation. Covers queue time + execution + idle. After expiry, the job is deleted regardless of state.                                 |
+| `CORS_ORIGIN`                  | `*`                                     | Allowed CORS origin. Set to a specific origin in production.                                                                                                            |
+| `WEBHOOK_TIMEOUT_MS`           | `10000`                                 | Timeout per attempt (ms) for POST delivery to the `webhook` URL. On non-200, retries up to 2 more times with a 10s delay.                                               |
+| `RATE_LIMIT_RUN`               | `1000`                                  | Max `/run` requests per 10-second window. Matches RunPod's documented rate limit.                                                                                       |
+| `RATE_LIMIT_RUNSYNC`           | `2000`                                  | Max `/runsync` requests per 10-second window.                                                                                                                           |
+| `RATE_LIMIT_STATUS`            | `2000`                                  | Max `/status` requests per 10-second window.                                                                                                                            |
+| `RATE_LIMIT_CANCEL`            | `100`                                   | Max `/cancel` requests per 10-second window.                                                                                                                            |
+| `RATE_LIMIT_PURGE_QUEUE`       | `2`                                     | Max `/purge-queue` requests per 10-second window.                                                                                                                       |
+| `RATE_LIMIT_HEALTH`            | `2000`                                  | Max `/health` requests per 10-second window.                                                                                                                            |
 
 ### Tuning Simulated Behavior
 
-| Scenario | `SIMULATED_DELAY_MIN_MS` | `SIMULATED_DELAY_MAX_MS` | `MOCK_FAILURE_RATE` |
-|----------|--------------------------|--------------------------|---------------------|
-| Everything succeeds instantly | `0` | `0` | `0` |
-| Realistic pipeline timing | `1000` | `5000` | `0` |
-| Test failure handling | `500` | `2000` | `0.2` |
-| Stress test timeouts | `30000` | `60000` | `0` |
+| Scenario                      | `SIMULATED_DELAY_MIN_MS` | `SIMULATED_DELAY_MAX_MS` | `MOCK_FAILURE_RATE` |
+| ----------------------------- | ------------------------ | ------------------------ | ------------------- |
+| Everything succeeds instantly | `0`                      | `0`                      | `0`                 |
+| Realistic pipeline timing     | `1000`                   | `5000`                   | `0`                 |
+| Test failure handling         | `500`                    | `2000`                   | `0.2`               |
+| Stress test timeouts          | `30000`                  | `60000`                  | `0`                 |
 
 ---
 
@@ -473,13 +477,13 @@ npm run clean
 
 ### Project Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start with `tsx watch` — automatically restarts on file changes. |
-| `npm run build` | Compile TypeScript to `dist/` with source maps and declarations. |
-| `npm start` | Run the compiled JavaScript from `dist/index.js`. |
-| `npm run typecheck` | Run `tsc --noEmit` to check types without compiling. |
-| `npm run clean` | Remove the `dist/` directory. |
+| Command             | Description                                                      |
+| ------------------- | ---------------------------------------------------------------- |
+| `npm run dev`       | Start with `tsx watch` — automatically restarts on file changes. |
+| `npm run build`     | Compile TypeScript to `dist/` with source maps and declarations. |
+| `npm start`         | Run the compiled JavaScript from `dist/index.js`.                |
+| `npm run typecheck` | Run `tsc --noEmit` to check types without compiling.             |
+| `npm run clean`     | Remove the `dist/` directory.                                    |
 
 ---
 
@@ -487,22 +491,22 @@ npm run clean
 
 This mock is designed for **local development and integration testing**. It is not a perfect replica. Key differences:
 
-| Aspect | Real RunPod | This Mock |
-|--------|-------------|-----------|
-| **Storage** | S3-compatible object storage with `s3Config` | No storage — returns a synthetic `outputObjectKey` path. |
-| **Webhooks** | Sends HTTP POST to `webhook` URL on completion | Delivered asynchronously via POST with configurable timeout. Retries up to 3 times with 10s delay, matching RunPod's documented behavior. |
-| **Results retention** | 30 min (async), 1 min (sync) | Configurable via `policy.ttl`, defaults to 30 min. |
-| **Worker scaling** | Auto-scales workers based on queue depth | Single simulated worker. |
-| **Streaming** | `/stream` endpoint for incremental output | Not implemented. |
-| **Persistence** | Jobs survive worker restarts | In-memory only — all jobs lost on restart. |
-| **Rate limits** | Dynamic based on worker count | Static per-endpoint limits, configurable via env. |
+| Aspect                | Real RunPod                                    | This Mock                                                                                                                                 |
+| --------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Storage**           | S3-compatible object storage with `s3Config`   | No storage — returns a synthetic `outputObjectKey` path.                                                                                  |
+| **Webhooks**          | Sends HTTP POST to `webhook` URL on completion | Delivered asynchronously via POST with configurable timeout. Retries up to 3 times with 10s delay, matching RunPod's documented behavior. |
+| **Results retention** | 30 min (async), 1 min (sync)                   | Configurable via `policy.ttl`, defaults to 30 min.                                                                                        |
+| **Worker scaling**    | Auto-scales workers based on queue depth       | Single simulated worker.                                                                                                                  |
+| **Streaming**         | `/stream` endpoint for incremental output      | Not implemented.                                                                                                                          |
+| **Persistence**       | Jobs survive worker restarts                   | In-memory only — all jobs lost on restart.                                                                                                |
+| **Rate limits**       | Dynamic based on worker count                  | Static per-endpoint limits, configurable via env.                                                                                         |
 
 ### When to Use vs Deploy to RunPod
 
-| Use the mock when... | Deploy to RunPod when... |
-|----------------------|--------------------------|
+| Use the mock when...              | Deploy to RunPod when...     |
+| --------------------------------- | ---------------------------- |
 | Developing the client integration | Running the full ML pipeline |
-| Writing tests for polling logic | Testing GPU inference |
-| Iterating on error handling | Validating S3 I/O |
-| CI/CD pipeline testing | Performance and load testing |
-| Frontend development | Production deployment |
+| Writing tests for polling logic   | Testing GPU inference        |
+| Iterating on error handling       | Validating S3 I/O            |
+| CI/CD pipeline testing            | Performance and load testing |
+| Frontend development              | Production deployment        |
